@@ -268,7 +268,7 @@ begin
   select name into pname from gd_parishes where id = p.parish_id;
   select coalesce(array_agg(distinct email), '{}') into rec from gd_staff
    where active and email <> '' and (
-     (p.parish_id is not null and role = 'pastor' and p.parish_id = any(parish_ids))
+     (p.parish_id is not null and role in ('pastor','admin') and p.parish_id = any(parish_ids))
      or (role = 'admin' and (p.parish_id is null or p.priority = '긴급')));
   if array_length(rec, 1) is null then return; end if;
   body := jsonb_build_object('secret', _gd_set('notify_secret'), 'kind', k, 'priority', p.priority, 'urgent', p.urgent,
@@ -551,14 +551,16 @@ begin
         when 'urgent' then p0.status <> 'closed' and p0.priority in ('긴급','높음')
         else true end)
       and (par is null or p0.parish_id = par)
+      and (coalesce(f->>'mine','') = '' or s.role <> 'admin' or cardinality(s.parish_ids) = 0 or p0.parish_id = any(s.parish_ids))
       and (f->>'status' is null or f->>'status' = '' or p0.status = f->>'status')
       and (q = '' or p0.name ilike '%' || q || '%' or p0.content ilike '%' || q || '%')
       order by p0.created_at desc limit coalesce(nullif(f->>'limit','')::int, 300)) p;
   return res;
 end $$;
 
-create or replace function gd_counts(p_token text) returns jsonb language plpgsql stable security definer set search_path = public as $$
-declare s gd_staff := _gd_auth(p_token);
+drop function if exists gd_counts(text);
+create or replace function gd_counts(p_token text, f jsonb default '{}') returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare s gd_staff := _gd_auth(p_token); mine boolean := coalesce(f->>'mine','') <> '' and s.role = 'admin' and cardinality(s.parish_ids) > 0;
 begin
   return (select jsonb_build_object(
     'new', count(*) filter (where status in ('new','assigned') and not exists(select 1 from gd_events e where e.prayer_id = p.id and e.kind in ('prayed','contacted','memo'))),
@@ -567,7 +569,7 @@ begin
     'inbox', count(*) filter (where parish_id is null and status <> 'closed'),
     'urgent', count(*) filter (where status <> 'closed' and priority in ('긴급','높음')),
     'closed', count(*) filter (where status = 'closed'))
-   from gd_prayers p where _gd_can_see(s, p));
+   from gd_prayers p where _gd_can_see(s, p) and (not mine or p.parish_id = any(s.parish_ids)));
 end $$;
 
 create or replace function gd_get(p_token text, p_id bigint) returns jsonb language plpgsql stable security definer set search_path = public as $$
