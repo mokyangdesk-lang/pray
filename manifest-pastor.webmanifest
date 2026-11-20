@@ -1,0 +1,29 @@
+{
+  "name": "365 기도동행 목회자",
+  "short_name": "기도동행 목회자",
+  "start_url": "./pastor.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f6f2ea",
+  "theme_color": "#1f4d3a",
+  "lang": "ko",
+  "icons": [
+    {
+      "src": "icons/pastor-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/pastor-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/pastor-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "id": "./pastor.html"
+}
