@@ -60,7 +60,9 @@
     (name.value ? code : name).focus();
   }
 
+  var MINE = false;   // 관리자이면서 교구도 맡은 분이 목회자 화면을 볼 때 → 내 교구만
   function enter() {
+    MINE = MODE === 'pastor' && me && me.role === 'admin' && (me.parishes || []).length > 0;
     if (MODE === 'admin' && me.role !== 'admin') {
       app.innerHTML = '';
       app.appendChild(el('div', { class: 'panel login center' }, [
@@ -88,7 +90,8 @@
         el('button', { class: 'icon-btn', type: 'button', 'aria-label': '메뉴', text: '⋯', onclick: menu })])]));
     GD.Install.init(ib);
     var who = me.name + (me.title ? ' ' + me.title + '님' : ' 님');
-    var where = me.role === 'admin' ? '전체 교구' : me.role === 'team' ? '중보기도팀' : (me.parishes || []).map(function (p) { return p.name; }).join(' · ');
+    var pnames = (me.parishes || []).map(function (p) { return p.name; }).join(' · ');
+    var where = me.role === 'team' ? '중보기도팀' : me.role !== 'admin' ? pnames : MINE ? pnames + ' 담당' : '전체 교구' + (pnames ? ' (담당 ' + pnames + ')' : '');
     app.appendChild(el('div', { class: 'hero', style: 'padding:4px 0 16px;text-align:left' }, [
       el('div', { style: 'font-size:20px;font-weight:800', text: who }), el('div', { class: 'muted small', text: (me.church || '') + ' · ' + where })]));
     var tabs = el('div', { class: 'tabs' + (MODE === 'admin' ? ' six' : ''), role: 'tablist', id: 'tabs' });
@@ -103,7 +106,7 @@
   function menu() {
     var body = el('div', {}, [
       el('dl', { class: 'kv' }, [el('dt', { text: '이름' }), el('dd', { text: me.name + ' ' + (me.title || '') }), el('dt', { text: '역할' }), el('dd', { text: ROLE[me.role] }),
-        el('dt', { text: '담당' }), el('dd', { text: me.role === 'admin' ? '전체' : (me.parishes || []).map(function (p) { return p.name; }).join(', ') || '-' })]),
+        el('dt', { text: '담당' }), el('dd', { text: me.role === 'admin' ? '전체' + ((me.parishes || []).length ? ' · 담당 ' + me.parishes.map(function (p) { return p.name; }).join(', ') : '') : (me.parishes || []).map(function (p) { return p.name; }).join(', ') || '-' })]),
       me.role === 'admin' ? el('a', { class: 'btn btn-line', style: 'margin-bottom:8px', href: MODE === 'admin' ? 'pastor.html' : 'admin.html', text: MODE === 'admin' ? '목회자 화면 보기' : '관리자 화면으로 가기' }) : null,
       el('a', { class: 'btn btn-line', href: memberUrl(''), target: '_blank', rel: 'noopener', text: '성도 화면 열기' })
     ]);
@@ -111,7 +114,7 @@
   }
   function setTab(v) { $$('#tabs .tab').forEach(function (t) { t.setAttribute('aria-selected', t.dataset.v === v ? 'true' : 'false'); }); }
   function refreshCounts() {
-    return call('gd_counts').then(function (c) {
+    return call('gd_counts', { f: MINE ? { mine: '1' } : {} }).then(function (c) {
       var map = MODE === 'admin' ? { inbox: c.inbox } : { new: c.new, active: c.active, today: c.today };
       $$('#tabs .badge').forEach(function (b) {
         var n = map[b.dataset.c]; b.hidden = !n; b.textContent = n || '';
@@ -134,7 +137,7 @@
   function listView(filter, into) {
     var box = into || pane();
     if (!into) loading();
-    return call('gd_list', { f: filter }).then(function (rows) {
+    return call('gd_list', { f: MINE ? Object.assign({ mine: '1' }, filter) : filter }).then(function (rows) {
       box.innerHTML = '';
       if (!rows.length) {
         var msg = { new: '새로 온 기도제목이 없습니다.', today: '오늘 연락할 기도제목이 없습니다.', inbox: '배정을 기다리는 기도제목이 없습니다.', closed: '종결된 기도제목이 없습니다.' }[filter.view] || '기도제목이 없습니다.';
@@ -256,7 +259,7 @@
       } else {
         foot.push(el('button', { type: 'button', class: 'btn btn-line', text: '다시 진행', onclick: function () { setStatus(r, 'reopen'); } }));
       }
-      if (MODE === 'pastor' && me.role === 'pastor' && r.parish_id) {
+      if (MODE === 'pastor' && (me.role === 'pastor' || MINE) && r.parish_id) {
         foot.push(el('button', { type: 'button', class: 'btn btn-soft', text: '교구 변경', onclick: function () { transfer(r); } }));
       }
     }
@@ -361,7 +364,7 @@
     var roleBox = el('div', { class: 'choices three' });
     [['pastor', '교구 목회자'], ['admin', '관리자'], ['team', '중보기도팀원']].forEach(function (r) {
       roleBox.appendChild(el('button', { type: 'button', class: 'choice', 'data-v': r[0], 'aria-pressed': role === r[0] ? 'true' : 'false', text: r[1], onclick: function () {
-        role = r[0]; $$('.choice', roleBox).forEach(function (c) { c.setAttribute('aria-pressed', c.dataset.v === role ? 'true' : 'false'); }); parField.hidden = role !== 'pastor';
+        role = r[0]; $$('.choice', roleBox).forEach(function (c) { c.setAttribute('aria-pressed', c.dataset.v === role ? 'true' : 'false'); }); parField.hidden = role === 'team'; parLb.textContent = role === 'admin' ? PAR_ADMIN : PAR_PASTOR;
       } }));
     });
     var parBox = el('div', { class: 'choices three' });
@@ -370,7 +373,9 @@
         var i = pids.indexOf(p.id); if (i >= 0) pids.splice(i, 1); else pids.push(p.id); this.setAttribute('aria-pressed', i >= 0 ? 'false' : 'true');
       } }));
     });
-    var parField = el('div', { class: 'field', hidden: role !== 'pastor' }, [el('label', { class: 'lb', text: '담당 교구 (여러 개 가능)' }), parBox]);
+    var PAR_PASTOR = '담당 교구 (여러 개 가능)', PAR_ADMIN = '담당 교구 (교구도 함께 맡으면 선택)';
+    var parLb = el('label', { class: 'lb', text: role === 'admin' ? PAR_ADMIN : PAR_PASTOR });
+    var parField = el('div', { class: 'field', hidden: role === 'team' }, [parLb, parBox]);
     var act = el('label', { class: 'check', style: 'margin:0' }, [el('input', { type: 'checkbox', checked: active, onchange: function () { active = this.checked; } }), '사용 중 (끄면 바로 로그아웃되고 로그인할 수 없습니다)']);
     var body = el('div', {}, [
       el('div', { class: 'grid-2' }, [el('div', { class: 'field' }, [el('label', { class: 'lb', text: '이름' }), f.name]), el('div', { class: 'field' }, [el('label', { class: 'lb', text: '직분' }), f.title])]),
@@ -382,7 +387,7 @@
     var m = GD.modal(isNew ? '사역자 추가' : '사역자 수정', body, [save]);
     save.addEventListener('click', function () {
       GD.busy(save, true);
-      call('gd_staff_save', { p: { id: s.id || '', name: f.name.value, title: f.title.value, role: role, parish_ids: role === 'pastor' ? pids : [], phone: f.phone.value, email: f.email.value, active: active } })
+      call('gd_staff_save', { p: { id: s.id || '', name: f.name.value, title: f.title.value, role: role, parish_ids: role === 'team' ? [] : pids, phone: f.phone.value, email: f.email.value, active: active } })
         .then(function (r) { m.close(); staffView(); if (r.code) codeModal({ name: f.name.value.trim(), title: f.title.value.trim(), role: role, phone: f.phone.value, email: f.email.value, parish_ids: pids }, r.code); else GD.toast('저장했습니다'); })
         .catch(function (e) { GD.busy(save, false); GD.toast(e.message); });
     });
@@ -395,8 +400,8 @@
   function codeModal(s, code) {
     var fmt = code.slice(0, 4) + '-' + code.slice(4);
     var pn = (me.all_parishes || []).filter(function (x) { return (s.parish_ids || []).indexOf(x.id) >= 0; }).map(function (x) { return x.name; }).join(', ');
-    var what = s.role === 'admin' ? '관리자 페이지' : s.role === 'team' ? '중보기도팀 페이지' : (pn ? pn + ' ' : '') + '기도제목 페이지';
-    var msg = '[365 기도동행] ' + s.name + (s.title ? ' ' + s.title : '') + '님, ' + what + ' 안내입니다.\n\n주소: ' + staffUrl(s.role) + '\n이름: ' + s.name + '\n코드: ' + fmt +
+    var what = s.role === 'admin' ? (pn ? '관리자·' + pn + ' 목회자 페이지' : '관리자 페이지') : s.role === 'team' ? '중보기도팀 페이지' : (pn ? pn + ' ' : '') + '기도제목 페이지';
+    var msg = '[365 기도동행] ' + s.name + (s.title ? ' ' + s.title : '') + '님, ' + what + ' 안내입니다.\n\n주소: ' + staffUrl(s.role) + (s.role === 'admin' && pn ? '\n목회자 화면(' + pn + '): ' + staffUrl('pastor') : '') + '\n이름: ' + s.name + '\n코드: ' + fmt +
       '\n\n처음 한 번만 입력하면 계속 로그인됩니다. 홈 화면에 추가해 두시면 앱처럼 쓰실 수 있습니다. 코드는 다른 분과 나누지 마세요.';
     var body = el('div', {}, [
       el('p', { class: 'muted small', text: '이 코드는 지금 한 번만 보입니다. 문자나 메일로 바로 보내 주세요.' }),
