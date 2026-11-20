@@ -500,7 +500,7 @@ begin
   return jsonb_build_object('token', tok, 'staff', gd_me(tok));
 end $$;
 
-create or replace function gd_me(p_token text) returns jsonb language plpgsql stable security definer set search_path = public as $$
+create or replace function gd_me(p_token text) returns jsonb language plpgsql volatile security definer set search_path = public as $$
 declare s gd_staff := _gd_auth(p_token);
 begin
   return jsonb_build_object('id', s.id, 'name', s.name, 'title', s.title, 'role', s.role, 'parish_ids', to_jsonb(s.parish_ids),
@@ -533,7 +533,7 @@ begin
                            and (e.created_at at time zone 'Asia/Seoul')::date = _gd_today()));
 end $$;
 
-create or replace function gd_list(p_token text, f jsonb default '{}') returns jsonb language plpgsql stable security definer set search_path = public as $$
+create or replace function gd_list(p_token text, f jsonb default '{}') returns jsonb language plpgsql volatile security definer set search_path = public as $$
 declare s gd_staff := _gd_auth(p_token); v text := coalesce(f->>'view', 'active'); q text := _gd_clean(f->>'q', 40);
   par int := nullif(f->>'parish_id','')::int; res jsonb;
 begin
@@ -559,7 +559,7 @@ begin
 end $$;
 
 drop function if exists gd_counts(text);
-create or replace function gd_counts(p_token text, f jsonb default '{}') returns jsonb language plpgsql stable security definer set search_path = public as $$
+create or replace function gd_counts(p_token text, f jsonb default '{}') returns jsonb language plpgsql volatile security definer set search_path = public as $$
 declare s gd_staff := _gd_auth(p_token); mine boolean := coalesce(f->>'mine','') <> '' and s.role = 'admin' and cardinality(s.parish_ids) > 0;
 begin
   return (select jsonb_build_object(
@@ -572,7 +572,7 @@ begin
    from gd_prayers p where _gd_can_see(s, p) and (not mine or p.parish_id = any(s.parish_ids)));
 end $$;
 
-create or replace function gd_get(p_token text, p_id bigint) returns jsonb language plpgsql stable security definer set search_path = public as $$
+create or replace function gd_get(p_token text, p_id bigint) returns jsonb language plpgsql volatile security definer set search_path = public as $$
 declare s gd_staff := _gd_auth(p_token); p gd_prayers;
 begin
   select * into p from gd_prayers where id = p_id;
@@ -662,7 +662,7 @@ begin
   return gd_get(p_token, p_id);
 end $$;
 
-create or replace function gd_stats(p_token text) returns jsonb language plpgsql stable security definer set search_path = public as $$
+create or replace function gd_stats(p_token text) returns jsonb language plpgsql volatile security definer set search_path = public as $$
 declare s gd_staff := _gd_auth(p_token);
 begin
   perform _gd_require(s, array['admin']);
@@ -688,7 +688,7 @@ begin
         select unnest(categories) c, count(*) n from gd_prayers where created_at > now() - interval '90 days' group by 1) t), '[]'));
 end $$;
 
-create or replace function gd_export(p_token text, p_from date, p_to date) returns jsonb language plpgsql stable security definer set search_path = public as $$
+create or replace function gd_export(p_token text, p_from date, p_to date) returns jsonb language plpgsql volatile security definer set search_path = public as $$
 declare s gd_staff := _gd_auth(p_token);
 begin
   perform _gd_require(s, array['admin']);
@@ -702,7 +702,7 @@ begin
     where (p.created_at at time zone 'Asia/Seoul')::date between p_from and p_to), '[]');
 end $$;
 
-create or replace function gd_staff_list(p_token text) returns jsonb language plpgsql stable security definer set search_path = public as $$
+create or replace function gd_staff_list(p_token text) returns jsonb language plpgsql volatile security definer set search_path = public as $$
 declare s gd_staff := _gd_auth(p_token);
 begin
   perform _gd_require(s, array['admin']);
@@ -745,7 +745,7 @@ begin
   return jsonb_build_object('id', p_id, 'code', code);
 end $$;
 
-create or replace function gd_settings_get(p_token text) returns jsonb language plpgsql stable security definer set search_path = public as $$
+create or replace function gd_settings_get(p_token text) returns jsonb language plpgsql volatile security definer set search_path = public as $$
 declare s gd_staff := _gd_auth(p_token);
 begin
   perform _gd_require(s, array['admin']);
