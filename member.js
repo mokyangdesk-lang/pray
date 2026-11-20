@@ -4,7 +4,15 @@
   var $ = GD.$, $$ = GD.$$, el = GD.el;
   var params = new URLSearchParams(location.search);
   var CFGD = null;           // 서버 설정
-  var state = { cats: [], care: ['pray'], time: '아무 때나', scope: 'staff', forWhom: 'self', minor: false, linkParish: null };
+  var state = { cats: [], care: [], time: '아무 때나', scope: '', forWhom: 'self', minor: false, linkParish: null };
+  // 서버를 아직 3_options.sql 로 올리지 않았을 때 쓰는 기본 선택지 (지금 화면과 같음)
+  var DEFAULT_OPTS = {
+    care: [{ code: 'pray', label: '기도만 부탁해요', icon: '🙏', base: 'pray' }, { code: 'call', label: '전화로 기도해 주세요', icon: '📞', base: 'call' },
+      { code: 'meet', label: '만나서 기도하고 싶어요', icon: '☕', base: 'meet' }, { code: 'visit', label: '심방(가정·병원)을 원해요', icon: '🏠', base: 'visit' },
+      { code: 'team', label: '중보기도팀도 함께해 주세요', icon: '🤝', base: 'team' }],
+    scope: [{ code: 'staff', label: '담당 목회자만', base: 'staff' }, { code: 'team', label: '중보기도팀과 함께', base: 'team' }, { code: 'anon', label: '이름 없이 내용만', base: 'anon' }]
+  };
+  var OPTS = DEFAULT_OPTS, CARE_BASE = {};
   var RKEY = 'gd_receipts';
 
   GD.registerSW();
@@ -43,7 +51,7 @@
       var c = (CFGD.categories || []).filter(function (x) { return x.name === n; })[0]; return c && c.mode === 'list';
     });
     $('#carePanel').hidden = listOnly;
-    var needTime = state.care.some(function (k) { return k === 'call' || k === 'meet' || k === 'visit'; });
+    var needTime = state.care.some(function (k) { var b = CARE_BASE[k]; return b === 'call' || b === 'meet' || b === 'visit'; });
     $('#timeField').hidden = !needTime;
   }
 
@@ -74,6 +82,21 @@
     });
     syncParish();
 
+    // 돌봄 · 공유 범위 (관리자가 정한 선택지)
+    OPTS = (CFGD.options && CFGD.options.care) ? CFGD.options : DEFAULT_OPTS;
+    CARE_BASE = {}; OPTS.care.forEach(function (o) { CARE_BASE[o.code] = o.base; });
+    var careBox = $('#care'); careBox.innerHTML = '';
+    OPTS.care.forEach(function (o) {
+      careBox.appendChild(el('button', { type: 'button', class: 'choice', 'data-v': o.code, 'aria-pressed': 'false' }, [o.icon ? el('span', { class: 'ic', text: o.icon }) : null, o.label]));
+    });
+    careBox.hidden = !OPTS.care.length; $('#careHint').hidden = !OPTS.care.length;
+    var scopeBox = $('#scope'); scopeBox.innerHTML = '';
+    OPTS.scope.forEach(function (o) {
+      scopeBox.appendChild(el('button', { type: 'button', class: 'choice', 'data-v': o.code, 'aria-pressed': 'false' }, [o.icon ? el('span', { class: 'ic', text: o.icon }) : null, o.label]));
+    });
+    $('#scopeField').hidden = OPTS.scope.length < 2;   // 하나뿐이면 고를 필요가 없으니 숨김
+    resetChoices();
+
     // 분야 (묶음별, 같은 크기 버튼)
     var box = $('#cats'); box.innerHTML = '';
     var groups = { '삶': '삶의 자리', '믿음': '믿음의 자리', '함께': '함께 드리는 기도 · 감사' };
@@ -97,16 +120,24 @@
     });
   }
 
-  // 돌봄 (여러 개, '기도만'은 단독)
+  // 처음 상태: 돌봄은 '기도만' 처리 방식의 첫 항목, 공유 범위는 맨 위 항목
+  function defaultCare() { var o = OPTS.care.filter(function (x) { return x.base === 'pray'; })[0]; return o ? [o.code] : []; }
+  function paintCare() { $$('#care .choice').forEach(function (c) { c.setAttribute('aria-pressed', state.care.indexOf(c.dataset.v) >= 0 ? 'true' : 'false'); }); }
+  function resetChoices() {
+    state.care = defaultCare(); paintCare();
+    state.scope = OPTS.scope.length ? OPTS.scope[0].code : '';
+    $$('#scope .choice').forEach(function (c) { c.setAttribute('aria-pressed', c.dataset.v === state.scope ? 'true' : 'false'); });
+  }
+
+  // 돌봄 (여러 개, '기도만' 처리 방식은 단독)
   $('#care').addEventListener('click', function (e) {
     var b = e.target.closest('.choice'); if (!b) return;
-    var v = b.dataset.v, i = state.care.indexOf(v);
+    var v = b.dataset.v, i = state.care.indexOf(v), isPray = CARE_BASE[v] === 'pray';
     if (i >= 0) state.care.splice(i, 1); else state.care.push(v);
-    if (v === 'pray' && i < 0) state.care = ['pray'];
-    else if (v !== 'pray') state.care = state.care.filter(function (x) { return x !== 'pray'; });
-    if (!state.care.length) state.care = ['pray'];
-    $$('#care .choice').forEach(function (c) { c.setAttribute('aria-pressed', state.care.indexOf(c.dataset.v) >= 0 ? 'true' : 'false'); });
-    syncCare();
+    if (isPray && i < 0) state.care = [v];
+    else if (!isPray) state.care = state.care.filter(function (x) { return CARE_BASE[x] !== 'pray'; });
+    if (!state.care.length) state.care = defaultCare();
+    paintCare(); syncCare();
   });
   single($('#time'), 'time'); single($('#scope'), 'scope');
   single($('#forWhom'), 'forWhom', function () { $('#relationField').hidden = state.forWhom !== 'other'; });
@@ -154,9 +185,9 @@
   }
 
   function resetForm() {
-    $('#form').reset(); $('#cnt').textContent = '0'; state.cats = []; state.care = ['pray'];
+    $('#form').reset(); $('#cnt').textContent = '0'; state.cats = [];
     $$('#cats .choice').forEach(function (c) { c.setAttribute('aria-pressed', 'false'); });
-    $$('#care .choice').forEach(function (c) { c.setAttribute('aria-pressed', c.dataset.v === 'pray' ? 'true' : 'false'); });
+    resetChoices();
     $('#urgentPanel').classList.remove('is-urgent'); syncCare(); syncParish();
   }
   $('#againBtn').addEventListener('click', function () { resetForm(); showView('formView'); });
@@ -221,5 +252,5 @@
   GD.rpc('gd_public_config').then(function (cfg) {
     CFGD = cfg; buildForm(); syncCare();
     if (params.get('view') === 'my') loadMy();
-  }).catch(function (e) { fail(e.message); CFGD = { parishes: [], categories: [] }; });
+  }).catch(function (e) { fail(e.message); CFGD = { parishes: [], categories: [] }; buildForm(); syncCare(); });
 })();

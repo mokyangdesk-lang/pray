@@ -259,8 +259,36 @@
     if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(function () {});
   }
 
+  /* ── 버튼 글자 맞춤: 선택 버튼 글자가 두 줄로 꺾이지 않게, 넘치면 글자 크기를 조금씩 줄입니다 ── */
+  function fit(root) {
+    var groups = [];
+    $$('.choice, .tab', root || document).forEach(function (b) {
+      if (!b.clientWidth) return;                       // 화면에 안 보이는 버튼은 보일 때 다시 맞춤
+      b.style.fontSize = '';
+      var size = parseFloat(getComputedStyle(b).fontSize), start = size, min = 11;
+      while (b.scrollWidth > b.clientWidth + 1 && size > min) { size -= 0.5; b.style.fontSize = size + 'px'; }
+      if (size < start) { var g = b.parentNode; if (groups.indexOf(g) < 0) groups.push(g); g._fit = Math.min(g._fit || 99, size); }
+    });
+    // 한 줄에 있는 버튼끼리는 글자 크기를 똑같이 맞춤
+    groups.forEach(function (g) {
+      Array.prototype.forEach.call(g.children, function (c) { if (c.classList.contains('choice') || c.classList.contains('tab')) c.style.fontSize = g._fit + 'px'; });
+      g._fit = 0;
+    });
+  }
+  var fitQueued = false;
+  function fitSoon() { if (fitQueued) return; fitQueued = true; requestAnimationFrame(function () { fitQueued = false; fit(); }); }
+  if (window.MutationObserver) {
+    var mo = new MutationObserver(function (ms) {
+      for (var i = 0; i < ms.length; i++) { var t = ms[i].target; if (!(t.classList && (t.classList.contains('choice') || t.classList.contains('tab')))) { fitSoon(); return; } }
+    });
+    var startObs = function () { mo.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden', 'class'] }); fitSoon(); };
+    if (document.body) startObs(); else document.addEventListener('DOMContentLoaded', startObs);
+  }
+  window.addEventListener('resize', fitSoon);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitSoon);
+
   function configured() { return CFG.SUPABASE_URL && CFG.SUPABASE_URL.indexOf('여기에') < 0; }
 
   window.GD = { rpc: rpc, store: store, $: $, $$: $$, el: el, toast: toast, modal: modal, fmtDate: fmtDate, ago: ago, busy: busy, copy: copy,
-    smsLink: smsLink, isIOS: isIOS, Install: Install, Font: Font, Card: Card, registerSW: registerSW, configured: configured };
+    smsLink: smsLink, isIOS: isIOS, Install: Install, Font: Font, Card: Card, registerSW: registerSW, configured: configured, fit: fit };
 })();

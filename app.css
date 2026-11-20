@@ -196,3 +196,35 @@ a { color: var(--primary); }
   .toolbar { grid-template-columns: 1fr 1fr; } .toolbar .q { grid-column: 1 / -1; }
 }
 @media (max-width: 360px) { .choices.three { grid-template-columns: 1fr; } .item-actions { grid-template-columns: 1fr 1fr; } }
+
+/* 선택지 (v2.1) — 관리자가 넣은 글자 길이가 달라도 줄과 칸이 흐트러지지 않게 */
+.choice { white-space: nowrap; overflow: hidden; min-width: 0; }
+.choices.list { grid-template-columns: 1fr; }
+.choices.list .choice { justify-content: flex-start; text-align: left; padding: 8px 14px; }
+.choices.list .choice .ic { width: 22px; text-align: center; flex: none; }
+@media (min-width: 720px) { .choices.list { grid-template-columns: 1fr 1fr; } }
+
+
+.seg { margin-bottom: 12px; }
+.opt-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; }
+.opt-name { display: flex; align-items: center; gap: 8px; min-width: 0; font-weight: 800; font-size: 15px; }
+.opt-name .ic { width: 24px; text-align: center; flex: none; font-size: 18px; }
+.opt-name .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.opt-tools { display: grid; grid-template-columns: 40px 40px 64px 72px; gap: 6px; }
+.opt-tools .btn { min-height: 40px; font-size: 13px; padding: 0 4px; border-radius: 10px; white-space: nowrap; }
+.opt-sub { margin: 6px 0 0 32px; }
+.opt-sub .tags { margin-bottom: 0; }
+.item.off { background: #f3efe7; }
+.item.off .opt-name { color: var(--faint); }
+@media (max-width: 420px) {
+  .opt-row { grid-template-columns: 1fr; }
+  .opt-tools { grid-template-columns: 40px 40px 1fr 1fr; }
+  .opt-sub { margin-left: 0; }
+}
+.len { float: right; font-weight: 400; color: var(--faint); font-size: 12px; }
+/* 관리자 탭 7개: 휴대폰에서는 위 4칸·아래 3칸이 양 끝까지 꽉 차게 */
+.tabs.seven { grid-template-columns: repeat(12, 1fr); }
+.tabs.seven .tab { grid-column: span 3; }
+.tabs.seven .tab:nth-child(n+5) { grid-column: span 4; }
+@media (min-width: 720px) { .tabs.seven { grid-template-columns: repeat(7, 1fr); } .tabs.seven .tab, .tabs.seven .tab:nth-child(n+5) { grid-column: auto; } }
+.choices.three.seg { grid-template-columns: repeat(3, 1fr); }

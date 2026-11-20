@@ -9,6 +9,15 @@
   var params = new URLSearchParams(location.search);
   var CARE = { pray: '기도만', call: '전화 기도', meet: '만나서 기도', visit: '심방', team: '중보기도팀' };
   var SCOPE = { staff: '담당 목회자만', team: '중보기도팀과 함께', anon: '이름 없이 공유' };
+  // 처리 방식 설명 (관리자 선택지 화면)
+  var CARE_BASE = [['pray', '기도만 (따로 연락하지 않음)'], ['call', '전화 연락 (2일 안)'], ['meet', '만나서 기도 (3일 안 연락)'], ['visit', '심방 (3일 안 연락)'], ['team', '중보기도팀 함께']];
+  var SCOPE_BASE = [['staff', '담당 목회자만 봄'], ['team', '중보기도팀도 봄 (이름 일부 가림)'], ['anon', '중보기도팀도 봄 (이름 숨김)']];
+  var OPT = { care: [], scope: [] };      // 관리자가 정한 선택지 (숨긴 것 포함)
+  function careOpt(c) { return (OPT.care || []).filter(function (x) { return x.code === c; })[0]; }
+  function careLabel(c) { var o = careOpt(c); return o ? o.label : (CARE[c] || c); }
+  function careBase(c) { var o = careOpt(c); return o ? o.base : c; }
+  function scopeLabel(b) { var l = OPT.scope || []; var o = l.filter(function (x) { return x.base === b && x.active; })[0] || l.filter(function (x) { return x.base === b; })[0]; return o ? o.label : (SCOPE[b] || b); }
+  function loadOptions() { return call('gd_options_all').then(function (o) { OPT = o; return o; }).catch(function () { return OPT; }); }
   var ROLE = { admin: '관리자', pastor: '교구 목회자', team: '중보기도팀원' };
   var STATUS = { new: '배정 대기', assigned: '배정', contacted: '연락 완료', closed: '종결' };
   var KIND = { submit: '접수', assign: '배정', prayed: '함께 기도', contacted: '연락', memo: '메모', status: '상태', transfer: '교구 변경 요청', member: '성도' };
@@ -71,7 +80,7 @@
         el('button', { class: 'btn btn-line', type: 'button', style: 'margin-top:8px', text: '로그아웃', onclick: function () { logout(); } })]));
       return;
     }
-    shell();
+    shell(); loadOptions();
     if (MODE === 'admin') go(params.get('tab') || 'dash'); else go('new');
     clearInterval(refreshTimer);
     refreshTimer = setInterval(function () { if (!document.hidden && !$('.overlay')) refreshCounts(); }, 60000);
@@ -79,7 +88,7 @@
 
   /* ───────── 틀 ───────── */
   var TABS_P = [['new', '새로 온'], ['active', '진행 중'], ['today', '오늘 연락'], ['closed', '종결']];
-  var TABS_A = [['dash', '현황'], ['inbox', '배정 대기'], ['all', '전체'], ['staff', '사역자'], ['links', '교구 링크'], ['settings', '설정']];
+  var TABS_A = [['dash', '현황'], ['inbox', '배정 대기'], ['all', '전체'], ['staff', '사역자'], ['links', '교구 링크'], ['opts', '선택지'], ['settings', '설정']];
   function shell() {
     app.innerHTML = '';
     var ib = el('button', { class: 'icon-btn', type: 'button', hidden: true, text: '＋ 홈 화면' });
@@ -94,7 +103,7 @@
     var where = me.role === 'team' ? '중보기도팀' : me.role !== 'admin' ? pnames : MINE ? pnames + ' 담당' : '전체 교구' + (pnames ? ' (담당 ' + pnames + ')' : '');
     app.appendChild(el('div', { class: 'hero', style: 'padding:4px 0 16px;text-align:left' }, [
       el('div', { style: 'font-size:20px;font-weight:800', text: who }), el('div', { class: 'muted small', text: (me.church || '') + ' · ' + where })]));
-    var tabs = el('div', { class: 'tabs' + (MODE === 'admin' ? ' six' : ''), role: 'tablist', id: 'tabs' });
+    var tabs = el('div', { class: 'tabs' + (MODE === 'admin' ? ' seven' : ''), role: 'tablist', id: 'tabs' });
     (MODE === 'admin' ? TABS_A : TABS_P).forEach(function (t) {
       tabs.appendChild(el('button', { class: 'tab', role: 'tab', type: 'button', 'data-v': t[0], 'aria-selected': 'false', onclick: function () { go(t[0]); } },
         [t[1], el('span', { class: 'badge', 'data-c': t[0], hidden: true })]));
@@ -130,7 +139,7 @@
   function go(v) {
     view = v; setTab(v); refreshCounts();
     if (MODE === 'pastor') return listView({ view: v });
-    ({ dash: dashView, inbox: function () { listView({ view: 'inbox' }); }, all: allView, staff: staffView, links: linksView, settings: settingsView }[v] || dashView)();
+    ({ dash: dashView, inbox: function () { listView({ view: 'inbox' }); }, all: allView, staff: staffView, links: linksView, opts: function () { optsView(); }, settings: settingsView }[v] || dashView)();
   }
 
   /* ───────── 기도제목 목록 ───────── */
@@ -227,9 +236,9 @@
     row('분야', (r.categories || []).join(', '));
     row('상황', r.situation + ' · ' + r.priority);
     if (r.important_date) row('중요한 날짜', r.important_date);
-    row('원하는 돌봄', (r.care || []).map(function (c) { return CARE[c] || c; }).join(', '));
-    if (r.contact_time && (r.care || []).some(function (c) { return c !== 'pray' && c !== 'team'; })) row('연락 시간', r.contact_time);
-    row('공유 범위', SCOPE[r.scope]);
+    row('원하는 돌봄', (r.care || []).map(careLabel).join(', '));
+    if (r.contact_time && (r.care || []).some(function (c) { var b = careBase(c); return b === 'call' || b === 'meet' || b === 'visit'; })) row('연락 시간', r.contact_time);
+    row('공유 범위', scopeLabel(r.scope));
     row('접수', GD.fmtDate(r.created_at, true));
     row('상태', STATUS[r.status] + (r.last_contact ? ' · 마지막 연락 ' + GD.fmtDate(r.last_contact) : '') + (r.next_due && r.status !== 'closed' ? ' · 다음 연락 ' + GD.fmtDate(r.next_due) : ''));
     row('함께 기도', (r.prayed_count || 0) + '번');
@@ -465,6 +474,161 @@
       [el('button', { type: 'button', class: 'btn btn-primary', text: '저장', onclick: function () {
         call('gd_parish_save', { p: { id: pa.id || '', name: nm.value, code: cd.value.trim().toLowerCase(), youth: y.checked, active: a.checked } })
           .then(function (x) { me = x; m.close(); linksView(); GD.toast('저장했습니다'); }).catch(function (e) { GD.toast(e.message); });
+      } })]);
+  }
+
+  /* ───────── 관리자: 선택지 (돌봄 종류 · 공유 범위 · 기도 분야) ───────── */
+  var GRP = [['삶', '삶의 자리'], ['믿음', '믿음의 자리'], ['함께', '함께 드리는 기도 · 감사']];
+  var OPT_MAX = { care: 16, scope: 14, cats: 10 };
+  function baseName(kind, b) { var l = (kind === 'care' ? CARE_BASE : SCOPE_BASE).filter(function (x) { return x[0] === b; })[0]; return l ? l[1] : b; }
+
+  function optsView(sub) {
+    sub = sub || optsView.sub || 'care'; optsView.sub = sub;
+    var p = pane(); p.innerHTML = '';
+    var seg = el('div', { class: 'choices three seg' });
+    [['care', '돌봄 종류'], ['scope', '공유 범위'], ['cats', '기도 분야']].forEach(function (t) {
+      seg.appendChild(el('button', { type: 'button', class: 'choice', 'aria-pressed': t[0] === sub ? 'true' : 'false', text: t[1], onclick: function () { optsView(t[0]); } }));
+    });
+    p.appendChild(seg);
+    var help = {
+      care: '성도 앱 「어떤 돌봄을 원하시나요?」에 보이는 버튼입니다. 새 버튼을 넣을 때는 처리 방식을 고르면, 그에 맞춰 우선순위와 연락 기한이 자동으로 잡힙니다.',
+      scope: '성도 앱 「기도제목 공유 범위」 버튼입니다. 누가 볼 수 있는지는 처리 방식으로만 정해지므로, 이름을 바꿔도 보안 규칙은 그대로입니다. 하나만 남기면 성도 화면에서 이 칸이 숨겨집니다.',
+      cats: '성도 앱 「기도 분야」 버튼입니다. 새 분야에 맞는 말씀이 아직 없으면 일반 말씀과 기도문으로 카드를 만듭니다.'
+    }[sub];
+    p.appendChild(el('div', { class: 'note ok' }, [el('div', { text: help })]));
+    var box = el('div'); p.appendChild(box);
+    box.innerHTML = '<div class="empty">불러오는 중…</div>';
+    loadOptions().then(function (o) {
+      if (!o.care || !o.care.length && !o.scope.length) {
+        box.innerHTML = ''; box.appendChild(el('div', { class: 'note warn' }, [el('div', { html: '<b>데이터베이스 업데이트가 필요합니다</b>Supabase SQL Editor에서 3_options.sql 을 한 번 실행해 주세요.' })])); return;
+      }
+      renderOpts(box, sub);
+    });
+  }
+
+  function renderOpts(box, sub) {
+    box.innerHTML = '';
+    var rows = sub === 'cats' ? (OPT.categories || []) : (OPT[sub] || []);
+    var list = el('div', { class: 'list' });
+    rows.forEach(function (o, i) {
+      var name = sub === 'cats' ? o.name : o.label;
+      var tags = [];
+      if (!o.active) tags.push(['숨김', 'red']);
+      if (sub === 'cats') {
+        tags.push([(GRP.filter(function (g) { return g[0] === o.grp; })[0] || ['', o.grp])[1], 'green']);
+        if (o.mode === 'list') tags.push(['연락 없이 중보 목록', '']);
+        if (o.dated) tags.push(['날짜 중요', '']);
+        if (o.special) tags.push(['우선순위 자동 판단', 'gold']);
+        tags.push([o.verses ? '말씀 ' + o.verses + '개' : '일반 말씀 사용', o.verses ? '' : 'orange']);
+      } else {
+        tags.push([baseName(sub, o.base), 'green']);
+      }
+      var move = function (d) {
+        var ids = rows.map(function (x) { return x.id; }), j = i + d;
+        if (j < 0 || j >= ids.length) return;
+        var t = ids[i]; ids[i] = ids[j]; ids[j] = t;
+        call('gd_reorder', { p_kind: sub === 'cats' ? 'category' : sub, p_ids: ids }).then(function (x) { OPT = x; renderOpts(box, sub); }).catch(function (e) { GD.toast(e.message); });
+      };
+      var toggle = function () {
+        var data = Object.assign({}, o, { active: !o.active });
+        if (sub !== 'cats' && o.active && OPT[sub].filter(function (x) { return x.active; }).length <= 1 && sub === 'scope') {
+          return GD.toast('공유 범위는 하나 이상 남겨 주세요');
+        }
+        saveOpt(sub, data).then(function () { renderOpts(box, sub); GD.toast(o.active ? '성도 화면에서 숨겼습니다' : '다시 보이게 했습니다'); });
+      };
+      list.appendChild(el('div', { class: 'item' + (o.active ? '' : ' off') }, [el('div', { class: 'opt-row' }, [
+        el('div', { style: 'min-width:0' }, [
+          el('div', { class: 'opt-name' }, [el('span', { class: 'ic', text: o.icon || '·' }), el('span', { class: 't', text: name })]),
+          el('div', { class: 'opt-sub' }, [el('div', { class: 'tags' }, tags.map(function (x) { return el('span', { class: 'tag ' + x[1], text: x[0] }); }))])]),
+        el('div', { class: 'opt-tools' }, [
+          el('button', { type: 'button', class: 'btn btn-line', 'aria-label': '위로', text: '▲', disabled: i === 0, onclick: function () { move(-1); } }),
+          el('button', { type: 'button', class: 'btn btn-line', 'aria-label': '아래로', text: '▼', disabled: i === rows.length - 1, onclick: function () { move(1); } }),
+          el('button', { type: 'button', class: 'btn btn-line', text: '수정', onclick: function () { optForm(sub, o, box); } }),
+          el('button', { type: 'button', class: 'btn ' + (o.active ? 'btn-soft' : 'btn-primary'), text: o.active ? '숨기기' : '보이기', onclick: toggle })])])]));
+    });
+    if (!rows.length) list.appendChild(el('div', { class: 'empty', text: '선택지가 없습니다. 아래에서 추가해 주세요.' }));
+    box.appendChild(list);
+    box.appendChild(el('div', { class: 'grid-2', style: 'margin-top:12px' }, [
+      el('button', { type: 'button', class: 'btn btn-primary', text: sub === 'cats' ? '＋ 분야 추가' : '＋ 선택지 추가', onclick: function () { optForm(sub, null, box); } }),
+      el('a', { class: 'btn btn-line', href: memberUrl(''), target: '_blank', rel: 'noopener', text: '성도 화면에서 확인' })]));
+  }
+
+  function saveOpt(sub, d) {
+    var req = sub === 'cats'
+      ? call('gd_category_save', { p: { id: d.id || '', name: d.name, icon: d.icon, tag: d.tag, grp: d.grp, mode: d.mode, dated: d.dated, active: d.active } })
+      : call('gd_option_save', { p: { id: d.id || '', kind: sub, label: d.label, icon: d.icon, base: d.base, active: d.active } });
+    return req.then(function (x) { OPT = x; return x; }).catch(function (e) { GD.toast(e.message); throw e; });
+  }
+
+  function optForm(sub, o, box) {
+    var isNew = !o, isCat = sub === 'cats';
+    o = o || (isCat ? { name: '', icon: '', tag: '', grp: '삶', mode: 'care', dated: false, active: true } : { label: '', icon: '', base: sub === 'care' ? 'call' : 'staff', active: true });
+    var max = OPT_MAX[sub];
+    var icon = el('input', { class: 'input', maxlength: '4', value: o.icon || '', placeholder: '🙏', style: 'text-align:center' });
+    var name = el('input', { class: 'input', maxlength: String(max), value: (isCat ? o.name : o.label) || '' });
+    var len = el('span', { class: 'len' });
+    var preview = el('button', { type: 'button', class: 'choice', 'aria-pressed': 'true', tabindex: '-1' });
+    var pv = el('div', { class: 'choices ' + (isCat ? 'cats' : 'list') }, [preview]);
+    if (isCat) pv.appendChild(el('button', { type: 'button', class: 'choice', tabindex: '-1', 'aria-pressed': 'false', html: '<span class="ic">📚</span>학업·시험' }));
+    var paint = function () {
+      len.textContent = name.value.length + ' / ' + max;
+      preview.innerHTML = ''; preview.style.fontSize = '';
+      if (icon.value.trim()) preview.appendChild(el('span', { class: 'ic', text: icon.value.trim() }));
+      preview.appendChild(document.createTextNode(name.value.trim() || '보이는 이름'));
+      GD.fit(pv);
+    };
+    icon.addEventListener('input', paint); name.addEventListener('input', paint);
+    var act = el('input', { type: 'checkbox', checked: o.active !== false });
+    var body = el('div', {}, [
+      el('div', { class: 'grid-2', style: 'grid-template-columns:80px 1fr' }, [
+        el('div', { class: 'field' }, [el('label', { class: 'lb', text: '아이콘' }), icon]),
+        el('div', { class: 'field' }, [el('label', { class: 'lb' }, [isCat ? '분야 이름' : '보이는 이름', len]), name])])
+    ]);
+    var base, grp, tag, dated, listMode;
+    if (isCat) {
+      grp = el('select', { class: 'select' }, GRP.map(function (g) { return el('option', { value: g[0], text: g[1], selected: g[0] === o.grp }); }));
+      tag = el('input', { class: 'input', maxlength: '30', value: o.tag || '', placeholder: '#길을_여시는_하나님' });
+      dated = el('input', { type: 'checkbox', checked: !!o.dated });
+      listMode = el('input', { type: 'checkbox', checked: o.mode === 'list' });
+      body.appendChild(el('div', { class: 'grid-2' }, [el('div', { class: 'field' }, [el('label', { class: 'lb', text: '묶음' }), grp]), el('div', { class: 'field' }, [el('label', { class: 'lb', text: '말씀 카드 해시태그' }), tag])]));
+      body.appendChild(el('label', { class: 'check' }, [dated, '날짜가 중요한 분야 (시험일·수술일처럼 그날을 앞두고 연락)']));
+      body.appendChild(el('label', { class: 'check' }, [listMode, '개인 연락 없이 중보 목록으로만 (이 분야만 고르면 돌봄 칸이 숨겨집니다)']));
+      if (!isNew) body.appendChild(el('p', { class: 'small muted', style: 'margin:-6px 0 12px', text: '이름을 바꾸면 이 분야의 말씀·기도문도 새 이름으로 따라갑니다. 이미 들어온 기도제목에는 예전 이름이 그대로 남습니다.' + (o.special ? ' 이 분야는 우선순위 자동 판단(수술·입원, 상실·애도, 감사)에 쓰이며, 이름을 바꿔도 판단은 그대로 됩니다.' : '') }));
+    } else {
+      base = el('select', { class: 'select' }, (sub === 'care' ? CARE_BASE : SCOPE_BASE).map(function (b) { return el('option', { value: b[0], text: b[1], selected: b[0] === o.base }); }));
+      body.appendChild(el('div', { class: 'field' }, [el('label', { class: 'lb', text: '처리 방식' }), base]));
+      body.appendChild(el('p', { class: 'small muted', style: 'margin:-6px 0 12px', text: sub === 'care'
+        ? '처리 방식에 따라 우선순위와 첫 연락일이 정해집니다. 「기도만」 방식은 다른 돌봄과 함께 고를 수 없습니다.'
+        : '누가 이 기도제목을 볼 수 있는지가 정해집니다. 중보기도팀에는 연락처가 보이지 않습니다.' }));
+    }
+    body.appendChild(el('label', { class: 'check' }, [act, '성도 화면에 보이기']));
+    body.appendChild(el('div', { class: 'section-title', text: '성도 화면 미리보기' }));
+    body.appendChild(pv);
+    body.appendChild(el('p', { class: 'small muted', style: 'margin-top:8px', text: '버튼 칸에 맞게 글자 크기가 자동으로 맞춰집니다. 글자가 너무 작아 보이면 이름을 줄여 주세요.' }));
+
+    var save = el('button', { type: 'button', class: 'btn btn-primary', text: '저장' });
+    var foot = [save];
+    if (!isNew) foot.unshift(el('button', { type: 'button', class: 'btn btn-danger', text: '지우기', onclick: function () { delOpt(sub, o, m, box); } }));
+    var m = GD.modal(isNew ? (isCat ? '분야 추가' : '선택지 추가') : (isCat ? '분야 수정' : '선택지 수정'), body, foot);
+    paint();
+    save.addEventListener('click', function () {
+      if (!name.value.trim()) return GD.toast('이름을 입력해 주세요');
+      var d = isCat
+        ? { id: o.id, name: name.value.trim(), icon: icon.value.trim(), tag: tag.value.trim(), grp: grp.value, mode: listMode.checked ? 'list' : 'care', dated: dated.checked, active: act.checked }
+        : { id: o.id, label: name.value.trim(), icon: icon.value.trim(), base: base.value, active: act.checked };
+      if (sub === 'scope' && !act.checked && OPT.scope.filter(function (x) { return x.active && x.id !== o.id; }).length === 0) return GD.toast('공유 범위는 하나 이상 남겨 주세요');
+      GD.busy(save, true);
+      saveOpt(sub, d).then(function () { m.close(); renderOpts(box, sub); GD.toast('저장했습니다'); }).catch(function () { GD.busy(save, false); });
+    });
+  }
+
+  function delOpt(sub, o, parent, box) {
+    var nm = sub === 'cats' ? o.name : o.label;
+    var mm = GD.modal('「' + nm + '」을(를) 지울까요?', el('p', { text: '이미 이 선택지로 들어온 기도제목이 있으면 지울 수 없습니다. 그럴 때는 「숨기기」를 쓰면 성도 화면에서만 보이지 않고 기록은 그대로 남습니다.' }), [
+      el('button', { type: 'button', class: 'btn btn-line', text: '취소', onclick: function () { mm.close(); } }),
+      el('button', { type: 'button', class: 'btn btn-danger', text: '지우기', onclick: function () {
+        call(sub === 'cats' ? 'gd_category_delete' : 'gd_option_delete', { p_id: o.id }).then(function (x) { OPT = x; mm.close(); parent.close(); renderOpts(box, sub); GD.toast('지웠습니다'); })
+          .catch(function (e) { GD.toast(e.message, 4000); });
       } })]);
   }
 

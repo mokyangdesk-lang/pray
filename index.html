@@ -105,14 +105,8 @@
 
       <section class="panel" id="carePanel">
         <h2><span class="n">4</span>어떤 돌봄을 원하시나요?</h2>
-        <p class="hint">여러 개 고르실 수 있습니다.</p>
-        <div class="choices field" id="care">
-          <button type="button" class="choice" data-v="pray" aria-pressed="true">🙏 기도만 부탁해요</button>
-          <button type="button" class="choice" data-v="call" aria-pressed="false">📞 전화로 기도해 주세요</button>
-          <button type="button" class="choice" data-v="meet" aria-pressed="false">☕ 만나서 기도하고 싶어요</button>
-          <button type="button" class="choice" data-v="visit" aria-pressed="false">🏠 심방(가정·병원)을 원해요</button>
-          <button type="button" class="choice" data-v="team" aria-pressed="false">🤝 중보기도팀도 함께해 주세요</button>
-        </div>
+        <p class="hint" id="careHint">여러 개 고르실 수 있습니다.</p>
+        <div class="choices list field" id="care"></div>
         <div class="field" id="timeField">
           <label class="lb">연락받기 편한 시간</label>
           <div class="choices" id="time" style="grid-template-columns:repeat(4,1fr)">
@@ -122,13 +116,9 @@
             <button type="button" class="choice" data-v="저녁" aria-pressed="false">저녁</button>
           </div>
         </div>
-        <div class="field">
+        <div class="field" id="scopeField">
           <label class="lb">기도제목 공유 범위</label>
-          <div class="choices three" id="scope">
-            <button type="button" class="choice" data-v="staff" aria-pressed="true">담당 목회자만</button>
-            <button type="button" class="choice" data-v="team" aria-pressed="false">중보기도팀과 함께</button>
-            <button type="button" class="choice" data-v="anon" aria-pressed="false">이름 없이 내용만</button>
-          </div>
+          <div class="choices list" id="scope"></div>
         </div>
       </section>
 

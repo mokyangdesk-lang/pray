@@ -1,6 +1,6 @@
 /* 365 기도동행 · 홈 화면 앱용 서비스 워커
    화면 파일은 최신을 먼저 받고(인터넷이 없으면 저장본), 기도제목 데이터는 저장하지 않습니다. */
-const CACHE = 'gido-v2.0.0';
+const CACHE = 'gido-v2.1.0';
 const SHELL = ['./', 'index.html', 'pastor.html', 'admin.html', 'app.css', 'common.js', 'member.js', 'staff.js', 'qr.js', 'config.js',
   'icons/member-192.png', 'icons/pastor-192.png', 'icons/admin-192.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });
